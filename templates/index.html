@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f6f8fb">
+    <title>AI Hub · 人工智能信息工作台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --ink:#18212f; --muted:#697586; --line:#e4e9ef; --paper:#fff; --canvas:#f6f8fb; --blue:#2f6fed; --blue-soft:#eaf1ff; --orange:#e26d3d; --green:#198f71; --shadow:0 18px 45px rgba(29,44,68,.08); }
+        * { box-sizing:border-box; }
+        body { margin:0; color:var(--ink); background:var(--canvas); font-family:"Manrope","Noto Sans SC",sans-serif; }
+        a { color:inherit; text-decoration:none; }
+        .topbar { height:72px; background:rgba(255,255,255,.88); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; backdrop-filter:blur(16px); }
+        .topbar-inner,.shell { max-width:1240px; margin:auto; padding:0 28px; }
+        .topbar-inner { height:100%; display:flex; align-items:center; justify-content:space-between; }
+        .brand { display:flex; align-items:center; gap:11px; font-size:18px; font-weight:800; letter-spacing:-.03em; }
+        .brand-mark { width:32px; height:32px; color:#fff; display:grid; place-items:center; background:var(--ink); border-radius:10px; font-size:15px; }
+        .brand em { color:var(--blue); font-style:normal; }
+        .top-meta { display:flex; align-items:center; gap:18px; color:var(--muted); font-size:12px; }
+        .auth-actions { display:flex; align-items:center; gap:8px; }
+        .auth-btn { border:1px solid var(--line); padding:8px 12px; color:var(--ink); background:#fff; border-radius:8px; cursor:pointer; font:600 12px "Noto Sans SC",sans-serif; }
+        .auth-btn.primary { color:#fff; border-color:var(--blue); background:var(--blue); }
+        .user-menu { display:none; align-items:center; gap:8px; color:var(--ink); font-size:12px; }
+        .user-menu.visible { display:flex; }
+        .auth-modal { display:none; position:fixed; inset:0; z-index:20; place-items:center; padding:18px; background:rgba(24,33,47,.42); }
+        .auth-modal.open { display:grid; }
+        .auth-panel { width:min(420px,100%); padding:26px; background:#fff; border-radius:16px; box-shadow:0 25px 70px rgba(24,33,47,.2); }
+        .auth-panel h2 { margin:0 0 6px; font-size:23px; }
+        .auth-panel p { margin:0 0 20px; color:var(--muted); font-size:13px; }
+        .auth-switch { display:flex; gap:4px; margin-bottom:18px; padding:4px; background:#f1f4f8; border-radius:8px; }
+        .auth-switch button { flex:1; border:0; padding:8px; color:var(--muted); background:transparent; border-radius:6px; cursor:pointer; font:600 13px "Noto Sans SC",sans-serif; }
+        .auth-switch button.active { color:var(--blue); background:#fff; }
+        .auth-form { display:none; }
+        .auth-form.active { display:block; }
+        .auth-form label { display:block; margin:12px 0 5px; color:var(--muted); font-size:12px; }
+        .auth-form input { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:8px; outline:0; font:14px "Noto Sans SC",sans-serif; }
+        .auth-form input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-soft); }
+        .auth-submit { width:100%; margin-top:18px; border:0; padding:11px; color:#fff; background:var(--blue); border-radius:8px; cursor:pointer; font:600 14px "Noto Sans SC",sans-serif; }
+        .auth-error { min-height:18px; margin-top:10px; color:#c43e35; font-size:12px; line-height:1.5; }
+        .auth-close { float:right; border:0; color:var(--muted); background:transparent; cursor:pointer; font-size:20px; }
+        .live-dot { display:inline-flex; align-items:center; gap:7px; font-family:"DM Mono",monospace; color:var(--green); }
+        .live-dot:before { content:""; width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px #d9f3ec; }
+        main { padding:54px 0 72px; }
+        .intro { display:grid; grid-template-columns:1fr 330px; align-items:end; gap:40px; margin-bottom:36px; }
+        .eyebrow { margin:0 0 14px; color:var(--blue); font:500 11px "DM Mono",monospace; letter-spacing:.13em; text-transform:uppercase; }
+        h1 { max-width:680px; margin:0; font-size:clamp(34px,5vw,58px); line-height:1.07; letter-spacing:-.06em; }
+        .intro-copy { margin:18px 0 0; color:var(--muted); font-size:15px; line-height:1.8; max-width:570px; }
+        .signal { padding:20px; color:#fff; background:var(--ink); border-radius:16px; position:relative; overflow:hidden; }
+        .signal:after { content:""; position:absolute; width:170px; height:170px; border:1px solid rgba(255,255,255,.15); border-radius:50%; right:-65px; bottom:-95px; }
+        .signal-label { color:#a8b5c8; font:11px "DM Mono",monospace; letter-spacing:.12em; }
+        .signal strong { display:block; margin-top:10px; font-size:27px; letter-spacing:-.04em; }
+        .signal small { color:#b9c4d2; display:block; margin-top:5px; }
+        .toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:22px; padding:8px; background:var(--paper); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px rgba(20,30,45,.03); }
+        .tabs { display:flex; gap:4px; flex-wrap:wrap; }
+        .tab { border:0; padding:10px 15px; color:var(--muted); background:transparent; border-radius:9px; cursor:pointer; font:600 13px "Noto Sans SC",sans-serif; transition:.2s; }
+        .tab:hover { color:var(--ink); background:#f1f4f8; }
+        .tab.active { color:var(--blue); background:var(--blue-soft); }
+        .tools { display:flex; gap:8px; align-items:center; }
+        .search { width:185px; padding:10px 12px 10px 35px; border:1px solid var(--line); border-radius:9px; color:var(--ink); outline:none; background:#fbfcfd url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23697586' stroke-width='1.7'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m11 11 4 4'/%3E%3C/svg%3E") 11px center no-repeat; font:13px "Noto Sans SC",sans-serif; }
+        .search:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-soft); }
+        .refresh { border:0; padding:10px 14px; color:#fff; background:var(--blue); border-radius:9px; cursor:pointer; font:600 13px "Noto Sans SC",sans-serif; transition:.2s; }
+        .refresh:hover { background:#245dce; transform:translateY(-1px); }
+        .refresh.loading { opacity:.7; pointer-events:none; }
+        .summary-row { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:34px; }
+        .metric { padding:17px 19px; background:var(--paper); border:1px solid var(--line); border-radius:13px; }
+        .metric-label { color:var(--muted); font-size:12px; }
+        .metric-value { display:block; margin-top:6px; font-size:25px; letter-spacing:-.04em; }
+        .metric:nth-child(2) .metric-value { color:var(--orange); }
+        .metric:nth-child(3) .metric-value { color:var(--green); }
+        .section-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:15px; }
+        .section-title { display:flex; gap:11px; align-items:center; margin:0; font-size:19px; letter-spacing:-.04em; }
+        .section-title:before { content:""; width:5px; height:19px; border-radius:3px; background:var(--blue); }
+        .section-sub { color:var(--muted); font-size:12px; }
+        .section { margin-top:34px; }
+        .section-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:15px; }
+        .article { min-height:190px; display:flex; flex-direction:column; padding:19px; background:var(--paper); border:1px solid var(--line); border-radius:13px; transition:transform .2s,box-shadow .2s,border-color .2s; }
+        .article:hover { border-color:#bdd0f4; box-shadow:var(--shadow); transform:translateY(-3px); }
+        .article-top { display:flex; justify-content:space-between; align-items:center; gap:10px; color:var(--muted); font:11px "DM Mono",monospace; }
+        .source { color:var(--blue); background:var(--blue-soft); padding:5px 8px; border-radius:5px; font-family:"Noto Sans SC",sans-serif; white-space:nowrap; }
+        .article h3 { margin:16px 0 8px; font-size:16px; line-height:1.5; letter-spacing:-.025em; }
+        .article p { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; margin:0; color:var(--muted); font-size:13px; line-height:1.7; }
+        .read { display:block; margin-top:auto; padding-top:17px; color:var(--blue); font-size:12px; font-weight:700; }
+        .pagination { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:22px; }
+        .page-btn { border:1px solid var(--line); padding:8px 14px; color:var(--ink); background:var(--paper); border-radius:8px; cursor:pointer; font:600 12px "Noto Sans SC",sans-serif; }
+        .page-btn:hover:not(:disabled) { color:var(--blue); border-color:#bdd0f4; }
+        .page-btn:disabled { color:#b5bdc8; background:#f3f5f7; cursor:not-allowed; }
+        .page-info { color:var(--muted); font:12px "DM Mono",monospace; }
+        .empty,.error { grid-column:1/-1; padding:52px; color:var(--muted); text-align:center; background:var(--paper); border:1px dashed #cad3df; border-radius:13px; }
+        footer { padding:22px 0 34px; border-top:1px solid var(--line); color:var(--muted); text-align:center; font-size:12px; }
+        @media (max-width:760px) { .topbar-inner,.shell { padding-left:18px; padding-right:18px; } .top-meta { display:flex; gap:8px; } .top-meta > .live-dot,.top-meta > #updated { display:none; } .user-menu { gap:5px; } .auth-btn { padding:7px 9px; } main { padding-top:35px; } .intro { grid-template-columns:1fr; gap:23px; } h1 { font-size:39px; } .toolbar { align-items:stretch; flex-direction:column; } .tools { width:100%; } .search { flex:1; width:auto; } .summary-row,.section-grid { grid-template-columns:1fr; } .summary-row { gap:8px; margin-bottom:28px; } .metric { padding:13px 15px; display:flex; align-items:center; justify-content:space-between; } .metric-value { margin-top:0; } }
+    </style>
+</head>
+<body>
+    <nav class="topbar"><div class="topbar-inner"><a class="brand" href="/"><span class="brand-mark">✦</span><span>AI <em>Hub</em></span></a><div class="top-meta"><span class="live-dot">LIVE FEED</span><span id="updated">正在同步</span><div class="auth-actions" id="auth-actions"><button class="auth-btn" id="login-open">登录</button><button class="auth-btn primary" id="register-open">注册</button></div><div class="user-menu" id="user-menu"><strong id="user-name"></strong><button class="auth-btn" id="logout">退出</button></div></div></div></nav>
+    <main><div class="shell">
+        <section class="intro"><div><p class="eyebrow">Intelligence, curated daily</p><h1>把 AI 世界，<br>整理成你的下一步。</h1><p class="intro-copy">实时追踪行业动态，快速阅读关键论文，沿着精选资源持续学习。一个页面，保持对人工智能的清醒感知。</p></div><div class="signal"><span class="signal-label">TODAY'S SIGNAL</span><strong id="total-signal">--</strong><small>条精选内容已收录</small></div></section>
+        <div class="toolbar"><div class="tabs"><button class="tab active" data-category="all">全部内容</button><button class="tab" data-category="ai_news">AI 实时资讯</button><button class="tab" data-category="papers">技术文献</button><button class="tab" data-category="learning">学习资源</button></div><div class="tools"><input class="search" id="search" type="search" placeholder="搜索标题或来源" aria-label="搜索标题或来源"><button class="refresh" id="refresh">↻ 刷新内容</button></div></div>
+        <div class="summary-row"><div class="metric"><span class="metric-label">AI 实时资讯</span><strong class="metric-value" id="news-count">--</strong></div><div class="metric"><span class="metric-label">技术文献</span><strong class="metric-value" id="paper-count">--</strong></div><div class="metric"><span class="metric-label">学习资源</span><strong class="metric-value" id="learning-count">--</strong></div></div>
+        <div id="content"></div>
+    </div></main>
+    <footer>AI Hub · 为持续学习和更好的判断力而聚合</footer>
+    <div class="auth-modal" id="auth-modal"><div class="auth-panel"><button class="auth-close" id="auth-close">×</button><h2>欢迎来到 AI Hub</h2><p>登录后可以保存你的收藏内容。</p><div class="auth-switch"><button class="active" data-auth-tab="login">登录</button><button data-auth-tab="register">注册</button></div><form class="auth-form active" id="login-form"><label for="login-account">用户名或邮箱</label><input id="login-account" name="account" autocomplete="username" required><label for="login-password">密码</label><input id="login-password" name="password" type="password" autocomplete="current-password" required><div class="auth-error" id="login-error"></div><button class="auth-submit">登录</button></form><form class="auth-form" id="register-form"><label for="register-username">用户名</label><input id="register-username" name="username" autocomplete="username" required><label for="register-email">邮箱</label><input id="register-email" name="email" type="email" autocomplete="email" required><label for="register-phone">手机号（可选）</label><input id="register-phone" name="phone" autocomplete="tel"><label for="register-password">密码</label><input id="register-password" name="password" type="password" autocomplete="new-password" required><div class="auth-error" id="register-error">至少 8 位，包含大小写字母、数字和特殊字符</div><button class="auth-submit">注册并登录</button></form></div></div>
+    <script>
+        const labels={ai_news:['AI 实时资讯','行业正在发生什么'],papers:['AI 技术文献','理解技术从哪里来'],learning:['AI 学习资源','把好奇心变成能力']}; let currentCategory='all'; let currentPage=1; const pageSize=12;
+        const content=document.getElementById('content'); const escapeHtml=value=>String(value||'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+        const load=async(category=currentCategory,page=currentPage)=>{ currentCategory=category; currentPage=page; content.innerHTML='<div class="empty">正在整理最新内容...</div>'; try { const params=new URLSearchParams(); const query=document.getElementById('search').value.trim(); params.set('limit',category==='all'?'100':String(pageSize)); if(category!=='all'){params.set('category',category); params.set('page',String(page));} if(query) params.set('q',query); const response=await fetch('/api/articles?'+params.toString(),{cache:'no-store'}); if(!response.ok) throw new Error('request failed'); const result=await response.json(); const articles=Array.isArray(result)?result:(Array.isArray(result.items)?result.items:[]); render(articles,category,result); } catch(error) { content.innerHTML='<div class="error">内容暂时无法加载，请稍后重试。</div>'; } };
+        const pad=value=>String(value).padStart(2,'0');
+        const formatDate=(value,fallback)=>{ let date=value?new Date(value):new Date(fallback); if(Number.isNaN(date.getTime())) date=new Date(fallback); if(Number.isNaN(date.getTime())) return '近期'; return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`; };
+        const renderCard=article=>`<a class="article" href="${escapeHtml(article.link)}" target="_blank" rel="noopener noreferrer"><div class="article-top"><span class="source">${escapeHtml(article.source)}</span><time datetime="${escapeHtml(article.published||article.fetched_at||'')}">${formatDate(article.published,article.fetched_at)}</time></div><h3>${escapeHtml(article.title)}</h3><p>${escapeHtml(article.summary||'暂无摘要')}</p><span class="read">阅读原文 →</span></a>`;
+        const render=(articles,category,result)=>{ if(category!=='all'){ const info=labels[category]; const total=result.total||articles.length; const pages=Math.max(1,Math.ceil(total/pageSize)); content.innerHTML=`<section class="section"><div class="section-head"><h2 class="section-title">${info[0]}</h2><span class="section-sub">${info[1]} · 共 ${total} 条</span></div><div class="section-grid">${articles.length?articles.map(renderCard).join(''):'<div class="empty">没有找到匹配内容</div>'}</div>${total?`<div class="pagination"><button class="page-btn" data-page="${currentPage-1}" ${currentPage<=1?'disabled':''}>上一页</button><span class="page-info">第 ${currentPage} / ${pages} 页</span><button class="page-btn" data-page="${currentPage+1}" ${currentPage>=pages?'disabled':''}>下一页</button></div>`:''}</section>`; document.querySelectorAll('.page-btn').forEach(button=>button.addEventListener('click',()=>load(category,Number(button.dataset.page)))); return; } content.innerHTML=Object.keys(labels).map(key=>{const items=articles.filter(article=>article.category===key).slice(0,6); return `<section class="section"><div class="section-head"><h2 class="section-title">${labels[key][0]}</h2><span class="section-sub">${labels[key][1]} · ${items.length} 条</span></div><div class="section-grid">${items.length?items.map(renderCard).join(''):'<div class="empty">暂无内容</div>'}</div></section>`;}).join(''); };
+        const updateStats=async()=>{ const stats=await fetch('/api/stats').then(response=>response.json()); document.getElementById('total-signal').textContent=stats.total; document.getElementById('news-count').textContent=stats.ai_news; document.getElementById('paper-count').textContent=stats.papers; document.getElementById('learning-count').textContent=stats.learning; document.getElementById('updated').textContent='更新于 '+new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); };
+        const refreshStatus=async()=>{ const response=await fetch('/api/refresh/status'); return response.json(); };
+        const deepseekStatus=async()=>{ const response=await fetch('/api/deepseek/status'); return response.json(); };
+        const authModal=document.getElementById('auth-modal'); const openAuth=tab=>{authModal.classList.add('open'); document.querySelector(`[data-auth-tab="${tab}"]`).click();};
+        const updateAuth=async()=>{const response=await fetch('/api/auth/me'); const result=response.ok?await response.json():{authenticated:false}; document.getElementById('auth-actions').style.display=result.authenticated?'none':'flex'; document.getElementById('user-menu').classList.toggle('visible',result.authenticated); if(result.authenticated) document.getElementById('user-name').textContent=result.user.username;};
+        const waitForRefresh=async()=>{ for(let attempt=0;attempt<40;attempt+=1){ const result=await refreshStatus(); if(result.refresh.status!=='running') return result; await new Promise(resolve=>setTimeout(resolve,1000)); } throw new Error('refresh timeout'); };
+        document.querySelectorAll('[data-auth-tab]').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('[data-auth-tab]').forEach(item=>item.classList.remove('active')); document.querySelectorAll('.auth-form').forEach(item=>item.classList.remove('active')); tab.classList.add('active'); document.getElementById(tab.dataset.authTab+'-form').classList.add('active');})); document.getElementById('login-open').addEventListener('click',()=>openAuth('login')); document.getElementById('register-open').addEventListener('click',()=>openAuth('register')); document.getElementById('auth-close').addEventListener('click',()=>authModal.classList.remove('open')); authModal.addEventListener('click',event=>{if(event.target===authModal) authModal.classList.remove('open');});
+        const submitAuth=async(event, type)=>{event.preventDefault(); const form=event.currentTarget; const error=document.getElementById(type+'-error'); error.textContent=''; const response=await fetch('/api/auth/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(form)))}); const result=await response.json(); if(!response.ok){error.textContent=result.fields?Object.values(result.fields).join('；'):result.error; return;} authModal.classList.remove('open'); form.reset(); await updateAuth();}; document.getElementById('login-form').addEventListener('submit',event=>submitAuth(event,'login')); document.getElementById('register-form').addEventListener('submit',event=>submitAuth(event,'register')); document.getElementById('logout').addEventListener('click',async()=>{await fetch('/api/auth/logout',{method:'POST'}); await updateAuth();});
+        let lastDeepseekFinished=null; document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(item=>item.classList.remove('active')); tab.classList.add('active'); load(tab.dataset.category,1);})); document.getElementById('search').addEventListener('input',()=>load(currentCategory,1)); document.getElementById('refresh').addEventListener('click',async event=>{const button=event.currentTarget; button.classList.add('loading'); button.textContent='同步中...'; try {await fetch('/api/refresh'); const result=await waitForRefresh(); if(result.refresh.status==='error') throw new Error(result.refresh.error); await updateStats(); await load();} catch(error) {document.getElementById('updated').textContent='同步失败，请稍后重试';} finally {button.classList.remove('loading'); button.textContent='↻ 刷新内容';}}); setInterval(async()=>{try {const result=await refreshStatus(); if(result.refresh.status==='ok'||result.refresh.status==='partial'){await updateStats(); await load();} const deepseek=await deepseekStatus(); if((deepseek.deepseek.status==='ok'||deepseek.deepseek.status==='partial')&&deepseek.deepseek.finished_at!==lastDeepseekFinished){lastDeepseekFinished=deepseek.deepseek.finished_at; await updateStats(); await load();}} catch(error) {}},60000); updateStats(); updateAuth(); load();
+    </script>
+</body>
+</html>
