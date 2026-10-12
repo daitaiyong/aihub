@@ -80,7 +80,17 @@
         <div class="summary-row"><div class="metric"><span class="metric-label">AI 实时资讯</span><strong class="metric-value" id="news-count">--</strong></div><div class="metric"><span class="metric-label">技术文献</span><strong class="metric-value" id="paper-count">--</strong></div><div class="metric"><span class="metric-label">学习资源</span><strong class="metric-value" id="learning-count">--</strong></div></div>
         <div id="content"></div>
     </div></main>
-    <footer>AI Hub · 为持续学习和更好的判断力而聚合</footer>
+        <!-- 页脚备案信息 -->
+    <footer class="py-6 mt-8 border-t border-gray-200 bg-white">
+        <div class="text-center text-sm text-gray-500">
+            <a href="http://beian.miit.gov.cn/" 
+               target="_blank" 
+               rel="noopener noreferrer"
+               class="hover:text-indigo-600 transition-colors">
+                沪ICP备2026008650号-2
+            </a>
+        </div>
+    </footer>
     <script>
         const labels={ai_news:['AI 实时资讯','行业正在发生什么'],papers:['AI 技术文献','理解技术从哪里来'],learning:['AI 学习资源','把好奇心变成能力']}; let currentCategory='all'; let currentPage=1; const pageSize=12;
         const content=document.getElementById('content'); const escapeHtml=value=>String(value||'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
