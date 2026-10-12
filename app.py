@@ -3,15 +3,12 @@ import sqlite3
 import os
 import re
 import json
-import hashlib
-import hmac
-import secrets
 import threading
 import time
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template, jsonify, request, make_response, has_request_context
+from flask import Flask, render_template, jsonify, request
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'aihub.db')
@@ -21,9 +18,6 @@ DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '').strip()
 DEEPSEEK_API_URL = os.getenv('DEEPSEEK_API_URL', 'https://api.deepseek.com/chat/completions')
 DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
 DEEPSEEK_TIMEOUT_SECONDS = max(10, int(os.getenv('DEEPSEEK_TIMEOUT_SECONDS', '90')))
-SESSION_DAYS = 3
-SESSION_SECONDS = SESSION_DAYS * 24 * 60 * 60
-SESSION_COOKIE = 'aihub_session'
 refresh_lock = threading.Lock()
 refresh_state = {
     'status': 'idle', 'started_at': None, 'finished_at': None,
@@ -102,117 +96,29 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)')
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-        email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-        phone TEXT,
-        password_hash TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        last_login_at TEXT
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        token_hash TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-    )''')
     favorite_columns = [row[1] for row in c.execute('PRAGMA table_info(favorites)').fetchall()]
-    if favorite_columns and 'user_id' not in favorite_columns:
-        c.execute('ALTER TABLE favorites RENAME TO favorites_legacy')
+    if favorite_columns and 'user_id' in favorite_columns:
+        c.execute('ALTER TABLE favorites RENAME TO favorites_user_legacy')
         favorite_columns = []
     if not favorite_columns:
         c.execute('''CREATE TABLE IF NOT EXISTS favorites (
-            user_id INTEGER NOT NULL,
-            article_id INTEGER NOT NULL,
+            article_id INTEGER PRIMARY KEY,
             created_at TEXT NOT NULL,
-            PRIMARY KEY(user_id, article_id),
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
         )''')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token_hash)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at)')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id)')
+    legacy_tables = {row[0] for row in c.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('favorites_user_legacy', 'favorites_legacy')"
+    ).fetchall()}
+    for table in legacy_tables:
+        columns = {row[1] for row in c.execute(f'PRAGMA table_info({table})').fetchall()}
+        if {'article_id', 'created_at'}.issubset(columns):
+            c.execute(f'''INSERT OR IGNORE INTO favorites(article_id, created_at)
+                SELECT article_id, MAX(created_at) FROM {table} GROUP BY article_id''')
     conn.commit()
     conn.close()
 
 def utc_now():
     return datetime.now(timezone.utc)
-
-def hash_password(password, salt=None):
-    salt = salt or secrets.token_bytes(16)
-    derived = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 240000)
-    return f'pbkdf2_sha256$240000${salt.hex()}${derived.hex()}'
-
-def verify_password(password, encoded):
-    try:
-        algorithm, rounds, salt_hex, digest_hex = encoded.split('$')
-        if algorithm != 'pbkdf2_sha256':
-            return False
-        candidate = hashlib.pbkdf2_hmac('sha256', password.encode(),
-                                        bytes.fromhex(salt_hex), int(rounds))
-        return hmac.compare_digest(candidate.hex(), digest_hex)
-    except (ValueError, TypeError):
-        return False
-
-def validate_registration(data):
-    username = str(data.get('username', '')).strip()
-    email = str(data.get('email', '')).strip().lower()
-    phone = str(data.get('phone', '')).strip()
-    password = str(data.get('password', ''))
-    errors = {}
-    if not re.fullmatch(r'[A-Za-z0-9_\u4e00-\u9fff]{3,24}', username):
-        errors['username'] = '用户名需为 3-24 位中文、字母、数字或下划线'
-    if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
-        errors['email'] = '请输入有效邮箱地址'
-    if phone and not re.fullmatch(r'\+?[0-9\- ]{7,20}', phone):
-        errors['phone'] = '请输入有效手机号'
-    password_rules = [
-        len(password) >= 8,
-        bool(re.search(r'[A-Z]', password)),
-        bool(re.search(r'[a-z]', password)),
-        bool(re.search(r'\d', password)),
-        bool(re.search(r'[^A-Za-z0-9]', password)),
-    ]
-    if not all(password_rules):
-        errors['password'] = '密码至少 8 位，且包含大写字母、小写字母、数字和特殊字符'
-    return errors, username, email, phone, password
-
-def public_user(user):
-    return {'id': user['id'], 'username': user['username'], 'email': user['email'],
-            'phone': user['phone'], 'created_at': user['created_at']}
-
-def current_user():
-    if not has_request_context():
-        return None
-    token = request.cookies.get(SESSION_COOKIE)
-    if not token:
-        return None
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    now = utc_now().isoformat()
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    row = conn.execute('''SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id
-        WHERE s.token_hash=? AND s.expires_at>?''', (token_hash, now)).fetchone()
-    conn.execute('DELETE FROM sessions WHERE expires_at<=?', (now,))
-    conn.commit()
-    conn.close()
-    return dict(row) if row else None
-
-def create_session(user_id):
-    token = secrets.token_urlsafe(48)
-    now = utc_now()
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute('''INSERT INTO sessions(user_id, token_hash, created_at, expires_at)
-        VALUES (?, ?, ?, ?)''', (user_id, hashlib.sha256(token.encode()).hexdigest(),
-                                  now.isoformat(),
-                                  datetime.fromtimestamp(now.timestamp() + SESSION_SECONDS,
-                                                          timezone.utc).isoformat()))
-    conn.commit()
-    conn.close()
-    return token
 
 def save_articles(articles):
     conn = sqlite3.connect(DB_PATH)
@@ -428,35 +334,27 @@ def get_articles(category=None, limit=30, offset=0, query='', source=None, favor
         conditions.append('(LOWER(a.title) LIKE ? OR LOWER(a.summary) LIKE ? OR LOWER(a.source) LIKE ?)')
         search = f'%{query.lower()}%'
         values.extend([search, search, search])
-    user = current_user()
-    if favorites_only and not user:
-        return []
     if favorites_only:
         conditions.append('f.article_id IS NOT NULL')
     where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
-    join_user = user['id'] if user else -1
     c.execute(f'''SELECT a.*, f.article_id IS NOT NULL AS favorite
-        FROM articles a LEFT JOIN favorites f ON f.article_id=a.id AND f.user_id=?
+        FROM articles a LEFT JOIN favorites f ON f.article_id=a.id
         {where} ORDER BY a.fetched_at DESC LIMIT ? OFFSET ?''',
-        (join_user, *values, limit, offset))
+        (*values, limit, offset))
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return rows
 
 def get_article(article_id):
-    user = current_user()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     row = conn.execute('''SELECT a.*, f.article_id IS NOT NULL AS favorite
-        FROM articles a LEFT JOIN favorites f ON f.article_id=a.id AND f.user_id=?
-        WHERE a.id=?''', (user['id'] if user else -1, article_id)).fetchone()
+        FROM articles a LEFT JOIN favorites f ON f.article_id=a.id
+        WHERE a.id=?''', (article_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
 def get_article_count(category=None, query='', source=None, favorites_only=False):
-    user = current_user()
-    if favorites_only and not user:
-        return 0
     conn = sqlite3.connect(DB_PATH)
     conditions = []
     values = []
@@ -473,10 +371,8 @@ def get_article_count(category=None, query='', source=None, favorites_only=False
     if favorites_only:
         conditions.append('f.article_id IS NOT NULL')
     where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
-    join_user = user['id'] if user else -1
     count = conn.execute(f'''SELECT COUNT(*) FROM articles a
-        LEFT JOIN favorites f ON f.article_id=a.id AND f.user_id=? {where}''',
-        (join_user, *values)).fetchone()[0]
+        LEFT JOIN favorites f ON f.article_id=a.id {where}''', values).fetchone()[0]
     conn.close()
     return count
 
@@ -506,78 +402,6 @@ if not get_articles(limit=1):
 def index():
     return render_template('index.html')
 
-@app.route('/api/auth/register', methods=['POST'])
-def api_register():
-    data = request.get_json(silent=True) or request.form
-    errors, username, email, phone, password = validate_registration(data)
-    if errors:
-        return jsonify({'error': '注册信息校验失败', 'fields': errors}), 400
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        created_at = utc_now().isoformat()
-        cursor = conn.execute('''INSERT INTO users
-            (username, email, phone, password_hash, created_at) VALUES (?, ?, ?, ?, ?)''',
-            (username, email, phone or None, hash_password(password), created_at))
-        user_id = cursor.lastrowid
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.rollback()
-        return jsonify({'error': '用户名或邮箱已注册'}), 409
-    finally:
-        conn.close()
-    token = create_session(user_id)
-    user = {'id': user_id, 'username': username, 'email': email, 'phone': phone or None,
-            'created_at': created_at}
-    response = make_response(jsonify({'user': public_user(user), 'expires_in': SESSION_SECONDS}), 201)
-    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS,
-                        httponly=True, samesite='Lax', secure=request.is_secure)
-    return response
-
-@app.route('/api/auth/login', methods=['POST'])
-def api_login():
-    data = request.get_json(silent=True) or request.form
-    account = str(data.get('account', data.get('username', ''))).strip()
-    password = str(data.get('password', ''))
-    if not account or not password:
-        return jsonify({'error': '请输入用户名或邮箱以及密码'}), 400
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    user = conn.execute('''SELECT * FROM users
-        WHERE username=? COLLATE NOCASE OR email=? COLLATE NOCASE''',
-        (account, account)).fetchone()
-    if not user or not verify_password(password, user['password_hash']):
-        conn.close()
-        return jsonify({'error': '用户名、邮箱或密码错误'}), 401
-    conn.execute('UPDATE users SET last_login_at=? WHERE id=?', (utc_now().isoformat(), user['id']))
-    conn.commit()
-    conn.close()
-    token = create_session(user['id'])
-    response = make_response(jsonify({'user': public_user(dict(user)), 'expires_in': SESSION_SECONDS}))
-    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS,
-                        httponly=True, samesite='Lax', secure=request.is_secure)
-    return response
-
-@app.route('/api/auth/me')
-def api_me():
-    user = current_user()
-    if not user:
-        return jsonify({'authenticated': False, 'user': None}), 401
-    return jsonify({'authenticated': True, 'user': public_user(user),
-                    'expires_in': SESSION_SECONDS})
-
-@app.route('/api/auth/logout', methods=['POST'])
-def api_logout():
-    token = request.cookies.get(SESSION_COOKIE)
-    if token:
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute('DELETE FROM sessions WHERE token_hash=?',
-                     (hashlib.sha256(token.encode()).hexdigest(),))
-        conn.commit()
-        conn.close()
-    response = make_response(jsonify({'status': 'ok'}))
-    response.delete_cookie(SESSION_COOKIE)
-    return response
-
 @app.route('/api/articles')
 def api_articles():
     category = request.args.get('category') or None
@@ -606,15 +430,12 @@ def api_article_detail(article_id):
 
 @app.route('/api/articles/<int:article_id>/favorite', methods=['POST', 'DELETE'])
 def api_article_favorite(article_id):
-    user = current_user()
-    if not user:
-        return jsonify({"error": "请先登录"}), 401
     if not get_article(article_id):
         return jsonify({"error": "文章不存在"}), 404
     conn = sqlite3.connect(DB_PATH)
     if request.method == 'POST':
-        conn.execute('''INSERT OR IGNORE INTO favorites(user_id, article_id, created_at)
-            VALUES (?, ?, ?)''', (user['id'], article_id, utc_now().isoformat()))
+        conn.execute('INSERT OR IGNORE INTO favorites(article_id, created_at) VALUES (?, ?)',
+                     (article_id, utc_now().isoformat()))
         favorite = True
     else:
         conn.execute('DELETE FROM favorites WHERE article_id=?', (article_id,))
@@ -625,8 +446,6 @@ def api_article_favorite(article_id):
 
 @app.route('/api/favorites')
 def api_favorites():
-    if not current_user():
-        return jsonify({"error": "请先登录"}), 401
     return jsonify({"items": get_articles(limit=100, favorites_only=True)})
 
 @app.route('/api/sources')

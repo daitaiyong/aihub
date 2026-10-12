@@ -9,9 +9,7 @@ AI Hub is a Flask-based AI information workspace that aggregates AI news, techni
 - Daily DeepSeek content update at `00:00:00` using the server's local timezone
 - Search and category filtering
 - Pagination for category pages, with 12 articles per page
-- User registration, login, logout, and three-day sessions
-- Strong password validation
-- Per-user article favorites
+- Public article favorites
 - SQLite persistence with automatic database initialization
 - Refresh and DeepSeek task status endpoints
 
@@ -125,29 +123,7 @@ POST   /api/articles/<id>/favorite
 DELETE /api/articles/<id>/favorite
 ```
 
-Favorites require an authenticated user.
-
-### Authentication
-
-```text
-POST /api/auth/register
-POST /api/auth/login
-GET  /api/auth/me
-POST /api/auth/logout
-```
-
-Registration fields:
-
-```json
-{
-  "username": "demo_user",
-  "email": "demo@example.com",
-  "phone": "13800138000",
-  "password": "StrongPass1!"
-}
-```
-
-The phone number is optional. Passwords must contain at least 8 characters, including uppercase and lowercase letters, a number, and a special character. Sessions expire after three days.
+Favorites are shared by all visitors and do not require an account.
 
 ### Refresh and task status
 
